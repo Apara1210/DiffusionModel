@@ -38,3 +38,15 @@ def save_model(save_path, model, optimizer, scheduler, loss, epoch):
         'loss'                  : loss,
         'epoch'                 : epoch
     }, save_path)
+
+def load_model(ckpt_path, model, optimizer, scheduler):
+    checkpoint  = torch.load(ckpt_path)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    epoch       = checkpoint['epoch']
+    loss        = checkpoint['loss']
+    if scheduler is None:
+        return model, optimizer, loss, epoch
+    else: 
+        scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        return model, optimizer, scheduler, loss, epoch

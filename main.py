@@ -88,20 +88,31 @@ def main():
     criterion   = torch.nn.L1Loss()
     scaler      = torch.cuda.amp.GradScaler()
 
-    logFile     = os.path.join(config['experiment_dir'], '0log.txt')
-    f           = open(logFile, 'w')
-    f.close()
-
-    utils.logging(logFile, [str(config), str(model), str(optimizer), str(criterion)])
-
-    print("\n Training started...")
     epochs  = config['epochs']
+    if config['continue_train'] is None: # training from scratch
+        logFile     = os.path.join(config['experiment_dir'], '0log.txt')
+        f           = open(logFile, 'w')
+        f.close()
 
-    best_loss   = 1e9
-    for epoch in range(epochs):
+        utils.logging(logFile, [str(config), str(model), str(optimizer), str(criterion)])
+
+        print("\n Training started...")
+        
+        best_loss   = 1e9
+        e           = 0
+
+    else:
+        ckpt_path   = os.path.join(config['continue_train'], 'model.pth')
+        logFile     = os.path.join(config['experiment_dir'], '0log.txt')
+
+        model, optimizer, scheduler, best_loss, e = utils.load_model(ckpt_path, model, optimizer, scheduler)
+        optimizer.param_groups[0]['lr'] *= 0.1
+        print("Continuing from epoch {} with Loss: {:.4f}".format(e, best_loss))
+
+    for epoch in range(e, epochs):
         total_loss  = 0
         batch_bar   = tqdm(total=len(dataloader), dynamic_ncols=True, leave=False, position=0, desc='Train')
-
+        lr0 = optimizer.param_groups[0]['lr']
         for batch_idx, data in enumerate(dataloader):
 
             optimizer.zero_grad()
@@ -116,13 +127,14 @@ def main():
             loss            = criterion(noise, pred_noise)
             total_loss      += loss.item()
 
-            scaler.scale(loss).backward() # This is a replacement for loss.backward()
-            scaler.step(optimizer) # This is a replacement for optimizer.step()
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
             scaler.update()
 
             batch_bar.set_postfix(
                 loss="{:.04f}".format(float(total_loss / (batch_idx + 1))),
-                iters="{}".format(batch_idx + 1 + epoch*len(dataloader)))
+                iters="{}".format(batch_idx + 1 + epoch*len(dataloader)),
+                lr="{:.04f}".format(lr0))
             batch_bar.update()
 
         batch_bar.close()
